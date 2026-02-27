@@ -51,7 +51,7 @@ nBodyGravityCalculation: bool = true
 main :: proc() {
 	bodies := generateSolarSystem()
 
-	raylib.InitWindow(i32(screenWidth), i32(screenHeight), "Hello World")
+	raylib.InitWindow(i32(screenWidth), i32(screenHeight), "nbody-odin")
 	defer raylib.CloseWindow()
 
 	SetWindowToPrimaryMonitor(true)
