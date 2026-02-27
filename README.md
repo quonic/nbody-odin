@@ -9,6 +9,8 @@ A simple n-body simulation written in Odin.
 - Generates a random solar system with a star, planets, and asteroid belts
 - Simulates gravity and orbital mechanics
 - Visualizes the system using raylib
+- Removes bodies that collide with the star or stray too far away
+- Automatic camera tracking of the system and zooming
 
 ## Performance
 
