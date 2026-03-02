@@ -178,6 +178,15 @@ isPointInRect :: proc(p: raylib.Vector2, rect: raylib.Rectangle) -> bool {
 	)
 }
 
+findBodyByID :: proc(bodies: [dynamic]Body, id: u64) -> ^Body {
+	for i := 0; i < len(bodies); i += 1 {
+		if bodies[i].id == id {
+			return &bodies[i]
+		}
+	}
+	return nil
+}
+
 buildSelectorButtons :: proc(bodies: [dynamic]Body) -> [dynamic]SelectorButton {
 	buttons: [dynamic]SelectorButton
 	append(
@@ -299,6 +308,22 @@ drawBodySelectorUI :: proc(bodies: [dynamic]Body) {
 		textX := i32(button.rect.x + (button.rect.width - f32(textWidth)) * 0.5)
 		textY := i32(button.rect.y + (button.rect.height - f32(selectorFontSize)) * 0.5)
 		raylib.DrawText(button.label, textX, textY, selectorFontSize, textColor)
+
+		// Draw line from button to body when hovering and no body is selected
+		if hovered && selectedBodyID == 0 && !button.is_reset {
+			body := findBodyByID(bodies, button.body_id)
+			if body != nil {
+				// Convert body world position to screen coordinates
+				bodyScreenPos := raylib.GetWorldToScreen2D(body.position, camera)
+				// Button center
+				buttonCenter := raylib.Vector2 {
+					button.rect.x + button.rect.width * 0.5,
+					button.rect.y + button.rect.height * 0.5,
+				}
+				// Draw thin line in the body's color
+				raylib.DrawLineV(buttonCenter, bodyScreenPos, body.color)
+			}
+		}
 	}
 }
 
