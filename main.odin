@@ -21,12 +21,10 @@ camera: raylib.Camera2D = raylib.Camera2D {
 	zoom     = 0.8,
 }
 
-radius: f32 = 20
-
 screenWidth: f32 = 1920
 screenHeight: f32 = 1080
 
-maxZoomOut: f32 = 0.3
+maxZoomOut: f32 = 0.1
 maxZoomIn: f32 = 3
 strayCullMultiplier: f32 = 1.5
 zoomSmoothing: f32 = 4
@@ -36,12 +34,12 @@ maxPlanetCount :: 10
 innerBeltAsteroidCount :: 100
 outerBeltAsteroidCount :: 200
 
-starMass: f32 = 100000
-planetMinOrbit: f32 = 180
-planetMaxOrbit: f32 = 820
+starMass: f32 = 1000000
+planetMinOrbit: f32 = 1800
+planetMaxOrbit: f32 = 8200
 minPlanetGap: f32 = 55
 innerBeltPadding: f32 = 20
-outerBeltInnerPadding: f32 = 140
+outerBeltInnerPadding: f32 = 1400
 outerBeltWidth: f32 = 260
 orbitSpeedScale: f32 = 0.95
 
@@ -49,7 +47,6 @@ orbitSpeedScale: f32 = 0.95
 nBodyGravityCalculation: bool = true
 
 main :: proc() {
-	bodies := generateSolarSystem()
 
 	raylib.InitWindow(i32(screenWidth), i32(screenHeight), "nbody-odin")
 	defer raylib.CloseWindow()
@@ -59,6 +56,8 @@ main :: proc() {
 	// screenHeight = f32(raylib.GetMonitorHeight(primaryMonitorIndex))
 	SetWindowToPrimaryMonitor(true)
 	// raylib.ToggleFullscreen()
+
+	bodies := generateSolarSystem()
 
 	for !raylib.WindowShouldClose() {
 		raylib.BeginDrawing()
@@ -113,6 +112,12 @@ main :: proc() {
 	}
 }
 
+massToRadius :: proc(mass: f32) -> f32 {
+	// Assuming density is constant, radius is proportional to the cube root of mass
+	density: f32 = 1.0 // You can adjust this value to scale the sizes of the bodies
+	return math.pow(mass / density, 1.0 / 3.0)
+}
+
 generateSolarSystem :: proc() -> [dynamic]Body {
 	bodies: [dynamic]Body
 
@@ -121,7 +126,7 @@ generateSolarSystem :: proc() -> [dynamic]Body {
 		position = starPosition,
 		velocity = raylib.Vector2{0, 0},
 		mass     = starMass,
-		radius   = 50,
+		radius   = massToRadius(starMass),
 		color    = raylib.RED,
 	}
 	append(&bodies, star)
@@ -167,13 +172,14 @@ generateSolarSystem :: proc() -> [dynamic]Body {
 
 		append(&planetOrbits, orbitRadius)
 
+		mass := rand.float32_range(1500, 12000)
 		append(
 			&bodies,
 			makeOrbitingBody(
 				star,
 				orbitRadius,
-				rand.float32_range(150, 1200),
-				rand.float32_range(14, 24),
+				mass,
+				massToRadius(mass),
 				planetColors[i % len(planetColors)],
 				rand.float32_range(0.97, 1.03),
 			),
@@ -251,26 +257,18 @@ appendAsteroidBelt :: proc(
 		if i >= coreCount {
 			orbitRadius = rand.float32_range(extendedMin, extendedMax)
 		}
-
+		mass := rand.float32_range(2, 14)
 		append(
 			bodies,
 			makeOrbitingBody(
 				star,
 				orbitRadius,
-				rand.float32_range(2, 14),
-				rand.float32_range(2, 6),
+				mass,
+				massToRadius(mass),
 				raylib.WHITE,
 				rand.float32_range(0.93, 1.07),
 			),
 		)
-	}
-}
-
-
-randomPosition :: proc() -> raylib.Vector2 {
-	return raylib.Vector2 {
-		rand.float32_range(radius, screenWidth - radius),
-		rand.float32_range(radius, screenHeight - radius),
 	}
 }
 
@@ -388,8 +386,8 @@ removeStrayBodies :: proc(bodies: ^[dynamic]Body) {
 	}
 
 	avgPosition := averageBodyPosition(bodies^)
-	maxDx := (screenWidth * 0.5 / maxZoomOut) + radius
-	maxDy := (screenHeight * 0.5 / maxZoomOut) + radius
+	maxDx := (screenWidth * 0.5 / maxZoomOut) + massToRadius(starMass)
+	maxDy := (screenHeight * 0.5 / maxZoomOut) + massToRadius(starMass)
 	cullRadius := math.max(maxDx, maxDy) * strayCullMultiplier
 	cullRadiusSq := cullRadius * cullRadius
 
@@ -428,8 +426,8 @@ updateCamera :: proc(bodies: [dynamic]Body) {
 	maxDx := f32(0)
 	maxDy := f32(0)
 	for body, _ in bodies {
-		dx := math.abs(body.position.x - avgPosition.x) + radius
-		dy := math.abs(body.position.y - avgPosition.y) + radius
+		dx := math.abs(body.position.x - avgPosition.x) + massToRadius(body.mass)
+		dy := math.abs(body.position.y - avgPosition.y) + massToRadius(body.mass)
 		if dx > maxDx {
 			maxDx = dx
 		}
