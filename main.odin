@@ -102,30 +102,34 @@ main :: proc() {
 	bodies := generateSolarSystem()
 
 	for !raylib.WindowShouldClose() {
-		raylib.BeginDrawing()
-		raylib.ClearBackground(raylib.BLACK)
-		raylib.DrawFPS(10, 10)
+		{
+			raylib.BeginDrawing()
+			raylib.ClearBackground(raylib.BLACK)
+			raylib.DrawFPS(10, 10)
 
-		deltaTime := raylib.GetFrameTime()
+			deltaTime := raylib.GetFrameTime()
 
-		stepPhysics(&bodies, deltaTime)
+			stepPhysics(&bodies, deltaTime)
 
-		if nBodyGravityCalculation {
-			resolveBodyCollision(&bodies)
-			removeStrayBodies(&bodies)
+			if nBodyGravityCalculation {
+				resolveBodyCollision(&bodies)
+				removeStrayBodies(&bodies)
+			}
+
+			handleBodySelectorUI(bodies)
+			updateCamera(bodies)
+
+			{
+				raylib.BeginMode2D(camera)
+				// Draw bodies
+				for body, _ in bodies {
+					raylib.DrawCircleV(body.position, body.radius, body.color)
+				}
+				raylib.EndMode2D()
+			}
+
+			drawBodySelectorUI(bodies)
+			raylib.EndDrawing()
 		}
-
-		handleBodySelectorUI(bodies)
-		updateCamera(bodies)
-
-		raylib.BeginMode2D(camera)
-		// Draw bodies
-		for body, _ in bodies {
-			raylib.DrawCircleV(body.position, body.radius, body.color)
-		}
-		raylib.EndMode2D()
-
-		drawBodySelectorUI(bodies)
-		raylib.EndDrawing()
 	}
 }
