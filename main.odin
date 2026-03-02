@@ -54,7 +54,11 @@ main :: proc() {
 	raylib.InitWindow(i32(screenWidth), i32(screenHeight), "nbody-odin")
 	defer raylib.CloseWindow()
 
+	// primaryMonitorIndex := GetPrimaryMonitor()
+	// screenWidth = f32(raylib.GetMonitorWidth(primaryMonitorIndex))
+	// screenHeight = f32(raylib.GetMonitorHeight(primaryMonitorIndex))
 	SetWindowToPrimaryMonitor(true)
+	// raylib.ToggleFullscreen()
 
 	for !raylib.WindowShouldClose() {
 		raylib.BeginDrawing()
@@ -98,7 +102,7 @@ main :: proc() {
 			body.position += body.velocity * deltaTime
 		}
 		if nBodyGravityCalculation {
-			removeBodiesCollidingWithStar(&bodies)
+			resolveBodyCollision(&bodies)
 			removeStrayBodies(&bodies)
 		}
 		updateCamera(bodies)
@@ -290,31 +294,92 @@ averageBodyPosition :: proc(bodies: [dynamic]Body) -> raylib.Vector2 {
 	return avgPosition / f32(len(bodies))
 }
 
-removeBodiesCollidingWithStar :: proc(bodies: ^[dynamic]Body) {
+// Removes the smaller mass body and adds the mass to the larger body when two bodies collide, simulating inelastic collisions and preventing extreme forces from close proximity
+resolveBodyCollision :: proc(bodies: ^[dynamic]Body) {
 	if len(bodies^) <= 1 {
 		return
 	}
 
-	star := bodies^[0]
-	writeIndex := 1
-	for readIndex in 1 ..< len(bodies^) {
-		body := bodies^[readIndex]
-		dx := body.position.x - star.position.x
-		dy := body.position.y - star.position.y
-		distanceSq := dx * dx + dy * dy
-		minDistance := star.radius + body.radius
-		minDistanceSq := minDistance * minDistance
-		star.mass += body.mass * 0.5
+	for {
+		if len(bodies^) <= 1 {
+			return
+		}
 
-		if distanceSq >= minDistanceSq {
+		mergedAny := false
+		removed := make([]bool, len(bodies^))
+
+		for i in 0 ..< len(bodies^) {
+			if removed[i] {
+				continue
+			}
+
+			for j in i + 1 ..< len(bodies^) {
+				if removed[j] {
+					continue
+				}
+
+				a := bodies^[i]
+				b := bodies^[j]
+
+				delta := b.position - a.position
+				radiusSum := a.radius + b.radius
+				if raylib.Vector2LengthSqr(delta) > radiusSum * radiusSum {
+					continue
+				}
+
+				survivorIndex := i
+				mergedIndex := j
+				if b.mass > a.mass {
+					survivorIndex = j
+					mergedIndex = i
+				}
+
+				survivor := bodies^[survivorIndex]
+				merged := bodies^[mergedIndex]
+
+				totalMass := survivor.mass + merged.mass
+				if totalMass <= 0 {
+					continue
+				}
+
+				survivor.velocity =
+					(survivor.velocity * survivor.mass + merged.velocity * merged.mass) / totalMass
+				survivor.mass = totalMass
+				survivor.radius = math.sqrt(
+					survivor.radius * survivor.radius + merged.radius * merged.radius,
+				)
+
+				bodies^[survivorIndex] = survivor
+				removed[mergedIndex] = true
+				mergedAny = true
+
+				if survivorIndex == i {
+					continue
+				}
+
+				break
+			}
+		}
+
+		if !mergedAny {
+			return
+		}
+
+		writeIndex := 0
+		for readIndex in 0 ..< len(bodies^) {
+			if removed[readIndex] {
+				continue
+			}
+
 			if writeIndex != readIndex {
-				bodies^[writeIndex] = body
+				bodies^[writeIndex] = bodies^[readIndex]
 			}
 			writeIndex += 1
 		}
+
+		resize(bodies, writeIndex)
 	}
 
-	resize(bodies, writeIndex)
 }
 
 removeStrayBodies :: proc(bodies: ^[dynamic]Body) {
