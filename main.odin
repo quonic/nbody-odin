@@ -61,6 +61,12 @@ ASTEROID_VELOCITY_MAX :: 10
 // Physics and angle parameters
 FULL_ROTATION :: 2.0
 
+// Color mass tier thresholds
+STAR_MASS_THRESHOLD :: 5000000
+HEAVY_PLANET_THRESHOLD :: 100000
+PLANET_THRESHOLD :: 15000
+MOON_THRESHOLD :: 1000
+
 // Set to true to calculate gravity between all bodies, false to only calculate gravity from the star for better performance
 nBodyGravityCalculation: bool = true
 
@@ -136,6 +142,42 @@ massToRadius :: proc(mass: f32) -> f32 {
 	return math.pow(mass / density, 1.0 / 3.0)
 }
 
+// Linearly interpolate between two colors
+lerpColor :: proc(a, b: raylib.Color, t: f32) -> raylib.Color {
+	t_clamped := math.clamp(t, 0, 1)
+	return raylib.Color {
+		u8(f32(a.r) * (1 - t_clamped) + f32(b.r) * t_clamped),
+		u8(f32(a.g) * (1 - t_clamped) + f32(b.g) * t_clamped),
+		u8(f32(a.b) * (1 - t_clamped) + f32(b.b) * t_clamped),
+		u8(f32(a.a) * (1 - t_clamped) + f32(b.a) * t_clamped),
+	}
+}
+
+// Determine body color based on mass using a spectrum gradient
+// Spectrum: Cyan (asteroids) -> Blue (moons) -> Green (planets) -> Yellow (heavy planets) -> Orange/Red (stars)
+colorFromMass :: proc(mass: f32) -> raylib.Color {
+	if mass >= STAR_MASS_THRESHOLD {
+		// Star: Red/Orange
+		return raylib.RED
+	} else if mass >= HEAVY_PLANET_THRESHOLD {
+		// Heavy Planet: Orange/Yellow gradient
+		t := (mass - HEAVY_PLANET_THRESHOLD) / (STAR_MASS_THRESHOLD - HEAVY_PLANET_THRESHOLD)
+		return lerpColor(raylib.YELLOW, raylib.ORANGE, t)
+	} else if mass >= PLANET_THRESHOLD {
+		// Planet: Green/Yellow gradient
+		t := (mass - PLANET_THRESHOLD) / (HEAVY_PLANET_THRESHOLD - PLANET_THRESHOLD)
+		return lerpColor(raylib.GREEN, raylib.YELLOW, t)
+	} else if mass >= MOON_THRESHOLD {
+		// Moon: Blue/Green gradient
+		t := (mass - MOON_THRESHOLD) / (PLANET_THRESHOLD - MOON_THRESHOLD)
+		return lerpColor(raylib.BLUE, raylib.GREEN, t)
+	} else {
+		// Asteroid: Cyan/Blue gradient
+		t := mass / MOON_THRESHOLD
+		return lerpColor(raylib.SKYBLUE, raylib.BLUE, t)
+	}
+}
+
 generateSolarSystem :: proc() -> [dynamic]Body {
 	bodies: [dynamic]Body
 
@@ -145,7 +187,7 @@ generateSolarSystem :: proc() -> [dynamic]Body {
 		velocity = raylib.Vector2{0, 0},
 		mass     = STAR_MASS_VALUE,
 		radius   = massToRadius(STAR_MASS_VALUE),
-		color    = raylib.RED,
+		color    = colorFromMass(STAR_MASS_VALUE),
 	}
 	append(&bodies, star)
 
@@ -155,17 +197,6 @@ generateSolarSystem :: proc() -> [dynamic]Body {
 	}
 	if planetCount > maxPlanetCount {
 		planetCount = maxPlanetCount
-	}
-
-	planetColors := [8]raylib.Color {
-		raylib.SKYBLUE,
-		raylib.BLUE,
-		raylib.GREEN,
-		raylib.YELLOW,
-		raylib.ORANGE,
-		raylib.PINK,
-		raylib.PURPLE,
-		raylib.LIME,
 	}
 
 	planetOrbits: [dynamic]f32
@@ -203,7 +234,6 @@ generateSolarSystem :: proc() -> [dynamic]Body {
 				orbitRadius,
 				mass,
 				massToRadius(mass),
-				planetColors[i % len(planetColors)],
 				rand.float32_range(PLANET_SPEED_VARIANCE_MIN, PLANET_SPEED_VARIANCE_MAX),
 			),
 		)
@@ -240,7 +270,6 @@ generateSolarSystem :: proc() -> [dynamic]Body {
 makeOrbitingBody :: proc(
 	star: Body,
 	orbitRadius, mass, radius: f32,
-	color: raylib.Color,
 	speedMultiplier: f32,
 ) -> Body {
 	angle := rand.float32_range(0, FULL_ROTATION * raylib.PI)
@@ -253,7 +282,7 @@ makeOrbitingBody :: proc(
 		velocity = star.velocity + tangent * orbitalSpeed,
 		mass = mass,
 		radius = radius,
-		color = color,
+		color = colorFromMass(mass),
 	}
 }
 
@@ -288,7 +317,6 @@ appendAsteroidBelt :: proc(
 				orbitRadius,
 				mass,
 				massToRadius(mass),
-				raylib.WHITE,
 				rand.float32_range(ASTEROID_SPEED_VARIANCE_MIN, ASTEROID_SPEED_VARIANCE_MAX),
 			),
 		)
@@ -369,6 +397,7 @@ resolveBodyCollision :: proc(bodies: ^[dynamic]Body) {
 				survivor.radius = math.sqrt(
 					survivor.radius * survivor.radius + merged.radius * merged.radius,
 				)
+				survivor.color = colorFromMass(survivor.mass)
 
 				bodies^[survivorIndex] = survivor
 				removed[mergedIndex] = true
