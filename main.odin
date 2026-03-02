@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import "core:math"
 import "core:math/rand"
 import "vendor:raylib"
@@ -7,11 +8,20 @@ import "vendor:raylib"
 
 // Physics Body struct
 Body :: struct {
+	id:       u64,
 	position: raylib.Vector2,
 	velocity: raylib.Vector2,
 	mass:     f32,
 	radius:   f32,
 	color:    raylib.Color,
+}
+
+SelectorButton :: struct {
+	rect:      raylib.Rectangle,
+	body_id:   u64,
+	label:     cstring,
+	is_reset:  bool,
+	is_active: bool,
 }
 
 camera: raylib.Camera2D = raylib.Camera2D {
@@ -29,6 +39,17 @@ maxZoomIn: f32 = 3
 strayCullMultiplier: f32 = 1.5
 zoomSmoothing: f32 = 4
 minVisualRadius :: 8 // Minimum visible radius to help prevent flickering when zoomed out
+selectedBodyZoom :: 2.0
+selectorButtonsPerRow :: 10
+selectorButtonWidth :: 150
+selectorButtonHeight :: 36
+selectorButtonGapX :: 10
+selectorButtonGapY :: 8
+selectorBottomMargin :: 16
+selectorFontSize :: 18
+
+nextBodyID: u64 = 1
+selectedBodyID: u64 = 0
 
 minPlanetCount :: 6
 maxPlanetCount :: 10
@@ -87,11 +108,7 @@ main :: proc() {
 	for !raylib.WindowShouldClose() {
 		raylib.BeginDrawing()
 		raylib.ClearBackground(raylib.BLACK)
-		defer raylib.EndDrawing()
 		raylib.DrawFPS(10, 10)
-		raylib.BeginMode2D(camera)
-		defer raylib.EndMode2D()
-
 
 		deltaTime := raylib.GetFrameTime()
 
@@ -129,12 +146,159 @@ main :: proc() {
 			resolveBodyCollision(&bodies)
 			removeStrayBodies(&bodies)
 		}
+
+		handleBodySelectorUI(bodies)
 		updateCamera(bodies)
+
+		raylib.BeginMode2D(camera)
 		// Draw bodies
 		for body, _ in bodies {
 			visualRadius := math.max(body.radius * camera.zoom, minVisualRadius)
 			raylib.DrawCircleV(body.position, visualRadius, body.color)
 		}
+		raylib.EndMode2D()
+
+		drawBodySelectorUI(bodies)
+		raylib.EndDrawing()
+	}
+}
+
+allocBodyID :: proc() -> u64 {
+	id := nextBodyID
+	nextBodyID += 1
+	return id
+}
+
+isPointInRect :: proc(p: raylib.Vector2, rect: raylib.Rectangle) -> bool {
+	return(
+		p.x >= rect.x &&
+		p.x <= rect.x + rect.width &&
+		p.y >= rect.y &&
+		p.y <= rect.y + rect.height \
+	)
+}
+
+buildSelectorButtons :: proc(bodies: [dynamic]Body) -> [dynamic]SelectorButton {
+	buttons: [dynamic]SelectorButton
+	append(
+		&buttons,
+		SelectorButton {
+			rect = raylib.Rectangle{},
+			body_id = 0,
+			label = "Reset",
+			is_reset = true,
+			is_active = selectedBodyID == 0,
+		},
+	)
+
+	planetOrdinal := 0
+	for body, i in bodies {
+		if body.mass < PLANET_MASS_MIN {
+			continue
+		}
+
+		label: cstring = ""
+		if i == 0 {
+			label = "Star"
+		} else {
+			planetOrdinal += 1
+			label = fmt.ctprintf("Planet %d", planetOrdinal)
+		}
+
+		append(
+			&buttons,
+			SelectorButton {
+				rect = raylib.Rectangle{},
+				body_id = body.id,
+				label = label,
+				is_reset = false,
+				is_active = selectedBodyID == body.id,
+			},
+		)
+	}
+
+	if len(buttons) == 0 {
+		return buttons
+	}
+
+	screenW := f32(raylib.GetScreenWidth())
+	screenH := f32(raylib.GetScreenHeight())
+
+	total := len(buttons)
+	rows := (total + selectorButtonsPerRow - 1) / selectorButtonsPerRow
+
+	for row in 0 ..< rows {
+		start := row * selectorButtonsPerRow
+		end := math.min(start + selectorButtonsPerRow, total)
+		count := end - start
+		if count <= 0 {
+			continue
+		}
+
+		rowWidth := f32(count) * selectorButtonWidth + f32(count - 1) * selectorButtonGapX
+		x := (screenW - rowWidth) * 0.5
+		y :=
+			screenH -
+			selectorBottomMargin -
+			selectorButtonHeight -
+			f32(row) * (selectorButtonHeight + selectorButtonGapY)
+
+		for i in start ..< end {
+			buttons[i].rect = raylib.Rectangle{x, y, selectorButtonWidth, selectorButtonHeight}
+			x += selectorButtonWidth + selectorButtonGapX
+		}
+	}
+
+	return buttons
+}
+
+handleBodySelectorUI :: proc(bodies: [dynamic]Body) {
+	if !raylib.IsMouseButtonPressed(.LEFT) {
+		return
+	}
+
+	buttons := buildSelectorButtons(bodies)
+	defer delete(buttons)
+
+	mouse := raylib.GetMousePosition()
+	for button, _ in buttons {
+		if !isPointInRect(mouse, button.rect) {
+			continue
+		}
+
+		if button.is_reset {
+			selectedBodyID = 0
+		} else {
+			selectedBodyID = button.body_id
+		}
+		return
+	}
+}
+
+drawBodySelectorUI :: proc(bodies: [dynamic]Body) {
+	buttons := buildSelectorButtons(bodies)
+	defer delete(buttons)
+
+	mouse := raylib.GetMousePosition()
+	for button, _ in buttons {
+		hovered := isPointInRect(mouse, button.rect)
+		fillColor := raylib.DARKGRAY
+		textColor := raylib.RAYWHITE
+
+		if button.is_active {
+			fillColor = raylib.SKYBLUE
+			textColor = raylib.BLACK
+		} else if hovered {
+			fillColor = raylib.GRAY
+		}
+
+		raylib.DrawRectangleRec(button.rect, fillColor)
+		raylib.DrawRectangleLinesEx(button.rect, 1, raylib.LIGHTGRAY)
+
+		textWidth := raylib.MeasureText(button.label, selectorFontSize)
+		textX := i32(button.rect.x + (button.rect.width - f32(textWidth)) * 0.5)
+		textY := i32(button.rect.y + (button.rect.height - f32(selectorFontSize)) * 0.5)
+		raylib.DrawText(button.label, textX, textY, selectorFontSize, textColor)
 	}
 }
 
@@ -185,6 +349,7 @@ generateSolarSystem :: proc() -> [dynamic]Body {
 
 	starPosition := raylib.Vector2{screenWidth * 0.5, screenHeight * 0.5}
 	star := Body {
+		id       = allocBodyID(),
 		position = starPosition,
 		velocity = raylib.Vector2{0, 0},
 		mass     = STAR_MASS_VALUE,
@@ -280,6 +445,7 @@ makeOrbitingBody :: proc(
 	orbitalSpeed := math.sqrt(star.mass / orbitRadius) * ORBIT_SPEED_SCALE_VALUE * speedMultiplier
 
 	return Body {
+		id = allocBodyID(),
 		position = star.position + radial * orbitRadius,
 		velocity = star.velocity + tangent * orbitalSpeed,
 		mass = mass,
@@ -468,12 +634,34 @@ updateCamera :: proc(bodies: [dynamic]Body) {
 		return
 	}
 
-	camera.offset = raylib.Vector2{screenWidth * 0.5, screenHeight * 0.5}
+	camera.offset = raylib.Vector2 {
+		f32(raylib.GetScreenWidth()) * 0.5,
+		f32(raylib.GetScreenHeight()) * 0.5,
+	}
+	deltaTime := raylib.GetFrameTime()
+	alpha := 1.0 - math.exp(-zoomSmoothing * deltaTime)
+
+	if selectedBodyID != 0 {
+		for body, _ in bodies {
+			if body.id != selectedBodyID {
+				continue
+			}
+
+			camera.target += (body.position - camera.target) * alpha
+			targetZoom := math.clamp(selectedBodyZoom, maxZoomOut, maxZoomIn)
+			camera.zoom = math.clamp(
+				camera.zoom + (targetZoom - camera.zoom) * alpha,
+				maxZoomOut,
+				maxZoomIn,
+			)
+			return
+		}
+
+		selectedBodyID = 0
+	}
 
 	// Calculate the average position of all bodies to center the camera
 	avgPosition := averageBodyPosition(bodies)
-	deltaTime := raylib.GetFrameTime()
-	alpha := 1.0 - math.exp(-zoomSmoothing * deltaTime)
 	camera.target += (avgPosition - camera.target) * alpha
 
 	// Calculate max axis extents from the average position
@@ -491,8 +679,8 @@ updateCamera :: proc(bodies: [dynamic]Body) {
 	}
 
 	margin := f32(0.9)
-	halfScreenWidth := screenWidth * 0.5
-	halfScreenHeight := screenHeight * 0.5
+	halfScreenWidth := f32(raylib.GetScreenWidth()) * 0.5
+	halfScreenHeight := f32(raylib.GetScreenHeight()) * 0.5
 
 	zoomX := f32(4.0)
 	zoomY := f32(4.0)
