@@ -28,6 +28,7 @@ maxZoomOut: f32 = 0.1
 maxZoomIn: f32 = 3
 strayCullMultiplier: f32 = 1.5
 zoomSmoothing: f32 = 4
+minVisualRadius :: 8 // Minimum visible radius to help prevent flickering when zoomed out
 
 minPlanetCount :: 6
 maxPlanetCount :: 10
@@ -35,7 +36,7 @@ innerBeltAsteroidCount :: 100
 outerBeltAsteroidCount :: 200
 
 // Star and orbital system constants
-STAR_MASS_VALUE :: 10000000
+STAR_MASS_VALUE :: 50000000
 PLANET_MIN_ORBIT_VALUE :: 1800
 PLANET_MAX_ORBIT_VALUE :: 8200
 PLANET_MIN_GAP_VALUE :: 55
@@ -131,7 +132,8 @@ main :: proc() {
 		updateCamera(bodies)
 		// Draw bodies
 		for body, _ in bodies {
-			raylib.DrawCircleV(body.position, body.radius, body.color)
+			visualRadius := math.max(body.radius * camera.zoom, minVisualRadius)
+			raylib.DrawCircleV(body.position, visualRadius, body.color)
 		}
 	}
 }
