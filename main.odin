@@ -35,8 +35,7 @@ maxZoomOut: f32 = 0.1
 maxZoomIn: f32 = 3
 strayCullMultiplier: f32 = 1.5
 zoomSmoothing: f32 = 4
-minVisualRadius :: 8 // Minimum visible radius to help prevent flickering when zoomed out
-selectedBodyZoom :: 2.0
+selectedBodyZoom :: 0.75
 selectorButtonsPerRow :: 10
 selectorButtonWidth :: 150
 selectorButtonHeight :: 36
@@ -122,8 +121,7 @@ main :: proc() {
 		raylib.BeginMode2D(camera)
 		// Draw bodies
 		for body, _ in bodies {
-			visualRadius := max(body.radius * camera.zoom, minVisualRadius)
-			raylib.DrawCircleV(body.position, visualRadius, body.color)
+			raylib.DrawCircleV(body.position, body.radius, body.color)
 		}
 		raylib.EndMode2D()
 
