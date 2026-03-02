@@ -34,14 +34,32 @@ maxPlanetCount :: 10
 innerBeltAsteroidCount :: 100
 outerBeltAsteroidCount :: 200
 
-starMass: f32 = 1000000
-planetMinOrbit: f32 = 1800
-planetMaxOrbit: f32 = 8200
-minPlanetGap: f32 = 55
-innerBeltPadding: f32 = 20
-outerBeltInnerPadding: f32 = 1400
-outerBeltWidth: f32 = 260
-orbitSpeedScale: f32 = 0.95
+// Star and orbital system constants
+STAR_MASS_VALUE :: 10000000
+PLANET_MIN_ORBIT_VALUE :: 1800
+PLANET_MAX_ORBIT_VALUE :: 8200
+PLANET_MIN_GAP_VALUE :: 55
+INNER_BELT_PADDING_VALUE :: 20
+OUTER_BELT_INNER_PADDING_VALUE :: 1400
+OUTER_BELT_WIDTH_VALUE :: 260
+ORBIT_SPEED_SCALE_VALUE :: 0.95
+
+// Planet generation parameters
+PLANET_ORBIT_VARIANCE_FACTOR :: 0.2
+PLANET_MASS_MIN :: 15000
+PLANET_MASS_MAX :: 120000
+PLANET_SPEED_VARIANCE_MIN :: 0.97
+PLANET_SPEED_VARIANCE_MAX :: 1.03
+
+// Asteroid generation parameters
+ASTEROID_MASS_MIN :: 2
+ASTEROID_MASS_MAX :: 14
+ASTEROID_SPEED_VARIANCE_MIN :: 0.93
+ASTEROID_SPEED_VARIANCE_MAX :: 1.07
+ASTEROID_VELOCITY_MAX :: 10
+
+// Physics and angle parameters
+FULL_ROTATION :: 2.0
 
 // Set to true to calculate gravity between all bodies, false to only calculate gravity from the star for better performance
 nBodyGravityCalculation: bool = true
@@ -125,8 +143,8 @@ generateSolarSystem :: proc() -> [dynamic]Body {
 	star := Body {
 		position = starPosition,
 		velocity = raylib.Vector2{0, 0},
-		mass     = starMass,
-		radius   = massToRadius(starMass),
+		mass     = STAR_MASS_VALUE,
+		radius   = massToRadius(STAR_MASS_VALUE),
 		color    = raylib.RED,
 	}
 	append(&bodies, star)
@@ -151,28 +169,33 @@ generateSolarSystem :: proc() -> [dynamic]Body {
 	}
 
 	planetOrbits: [dynamic]f32
-	range := planetMaxOrbit - planetMinOrbit
+	range: f32 = PLANET_MAX_ORBIT_VALUE - PLANET_MIN_ORBIT_VALUE
 	for i in 0 ..< planetCount {
 		t := f32(i)
 		if planetCount > 1 {
 			t /= f32(planetCount - 1)
 		}
 
-		slotOrbit := planetMinOrbit + range * t
-		orbitRadius := slotOrbit + rand.float32_range(-0.2 * minPlanetGap, 0.2 * minPlanetGap)
+		slotOrbit := PLANET_MIN_ORBIT_VALUE + range * t
+		orbitRadius :=
+			slotOrbit +
+			rand.float32_range(
+				-PLANET_ORBIT_VARIANCE_FACTOR * PLANET_MIN_GAP_VALUE,
+				PLANET_ORBIT_VARIANCE_FACTOR * PLANET_MIN_GAP_VALUE,
+			)
 		if i > 0 {
-			minAllowed := planetOrbits[i - 1] + minPlanetGap
+			minAllowed := planetOrbits[i - 1] + PLANET_MIN_GAP_VALUE
 			if orbitRadius < minAllowed {
 				orbitRadius = minAllowed
 			}
 		}
-		if orbitRadius > planetMaxOrbit {
-			orbitRadius = planetMaxOrbit
+		if orbitRadius > PLANET_MAX_ORBIT_VALUE {
+			orbitRadius = PLANET_MAX_ORBIT_VALUE
 		}
 
 		append(&planetOrbits, orbitRadius)
 
-		mass := rand.float32_range(1500, 12000)
+		mass := rand.float32_range(PLANET_MASS_MIN, PLANET_MASS_MAX)
 		append(
 			&bodies,
 			makeOrbitingBody(
@@ -181,7 +204,7 @@ generateSolarSystem :: proc() -> [dynamic]Body {
 				mass,
 				massToRadius(mass),
 				planetColors[i % len(planetColors)],
-				rand.float32_range(0.97, 1.03),
+				rand.float32_range(PLANET_SPEED_VARIANCE_MIN, PLANET_SPEED_VARIANCE_MAX),
 			),
 		)
 	}
@@ -198,8 +221,8 @@ generateSolarSystem :: proc() -> [dynamic]Body {
 		midIndex = len(planetOrbits) - 1
 	}
 
-	innerBeltMin := planetOrbits[innerReferenceIndex] + innerBeltPadding
-	innerBeltMax := planetOrbits[midIndex] - innerBeltPadding
+	innerBeltMin := planetOrbits[innerReferenceIndex] + INNER_BELT_PADDING_VALUE
+	innerBeltMax := planetOrbits[midIndex] - INNER_BELT_PADDING_VALUE
 	if innerBeltMax <= innerBeltMin {
 		innerBeltCenter := (planetOrbits[0] + planetOrbits[len(planetOrbits) - 1]) * 0.5
 		innerBeltMin = innerBeltCenter - 50
@@ -207,8 +230,8 @@ generateSolarSystem :: proc() -> [dynamic]Body {
 	}
 	appendAsteroidBelt(&bodies, star, innerBeltMin, innerBeltMax, innerBeltAsteroidCount)
 
-	outerBeltMin := planetOrbits[len(planetOrbits) - 1] + outerBeltInnerPadding
-	outerBeltMax := outerBeltMin + outerBeltWidth
+	outerBeltMin := planetOrbits[len(planetOrbits) - 1] + OUTER_BELT_INNER_PADDING_VALUE
+	outerBeltMax := outerBeltMin + OUTER_BELT_WIDTH_VALUE
 	appendAsteroidBelt(&bodies, star, outerBeltMin, outerBeltMax, outerBeltAsteroidCount)
 
 	return bodies
@@ -220,10 +243,10 @@ makeOrbitingBody :: proc(
 	color: raylib.Color,
 	speedMultiplier: f32,
 ) -> Body {
-	angle := rand.float32_range(0, 2 * raylib.PI)
+	angle := rand.float32_range(0, FULL_ROTATION * raylib.PI)
 	radial := raylib.Vector2{math.cos(angle), math.sin(angle)}
 	tangent := raylib.Vector2{-radial.y, radial.x}
-	orbitalSpeed := math.sqrt(star.mass / orbitRadius) * orbitSpeedScale * speedMultiplier
+	orbitalSpeed := math.sqrt(star.mass / orbitRadius) * ORBIT_SPEED_SCALE_VALUE * speedMultiplier
 
 	return Body {
 		position = star.position + radial * orbitRadius,
@@ -257,7 +280,7 @@ appendAsteroidBelt :: proc(
 		if i >= coreCount {
 			orbitRadius = rand.float32_range(extendedMin, extendedMax)
 		}
-		mass := rand.float32_range(2, 14)
+		mass := rand.float32_range(ASTEROID_MASS_MIN, ASTEROID_MASS_MAX)
 		append(
 			bodies,
 			makeOrbitingBody(
@@ -266,7 +289,7 @@ appendAsteroidBelt :: proc(
 				mass,
 				massToRadius(mass),
 				raylib.WHITE,
-				rand.float32_range(0.93, 1.07),
+				rand.float32_range(ASTEROID_SPEED_VARIANCE_MIN, ASTEROID_SPEED_VARIANCE_MAX),
 			),
 		)
 	}
@@ -274,8 +297,8 @@ appendAsteroidBelt :: proc(
 
 // Generate a random velocity vector tangential to the initial position to create more interesting motion
 randomVelocity :: proc() -> raylib.Vector2 {
-	angle := rand.float32_range(0, 2 * raylib.PI)
-	speed := rand.float32_range(0, 10) // Random speed between 0 and 10
+	angle := rand.float32_range(0, FULL_ROTATION * raylib.PI)
+	speed := rand.float32_range(0, ASTEROID_VELOCITY_MAX) // Random speed between 0 and 10
 	return raylib.Vector2{math.cos(angle) * speed, math.sin(angle) * speed}
 }
 
@@ -386,8 +409,8 @@ removeStrayBodies :: proc(bodies: ^[dynamic]Body) {
 	}
 
 	avgPosition := averageBodyPosition(bodies^)
-	maxDx := (screenWidth * 0.5 / maxZoomOut) + massToRadius(starMass)
-	maxDy := (screenHeight * 0.5 / maxZoomOut) + massToRadius(starMass)
+	maxDx := (screenWidth * 0.5 / maxZoomOut) + massToRadius(STAR_MASS_VALUE)
+	maxDy := (screenHeight * 0.5 / maxZoomOut) + massToRadius(STAR_MASS_VALUE)
 	cullRadius := math.max(maxDx, maxDy) * strayCullMultiplier
 	cullRadiusSq := cullRadius * cullRadius
 
