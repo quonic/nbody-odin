@@ -122,13 +122,7 @@ drawBodySelectorUI :: proc(bodies: [dynamic]Body) {
 			fillColor = raylib.GRAY
 		}
 
-		raylib.DrawRectangleRec(button.rect, fillColor)
-		raylib.DrawRectangleLinesEx(button.rect, 1, raylib.LIGHTGRAY)
-
-		textWidth := raylib.MeasureText(button.label, selectorFontSize)
-		textX := i32(button.rect.x + (button.rect.width - f32(textWidth)) * 0.5)
-		textY := i32(button.rect.y + (button.rect.height - f32(selectorFontSize)) * 0.5)
-		raylib.DrawText(button.label, textX, textY, selectorFontSize, textColor)
+		outlineColor := raylib.LIGHTGRAY
 
 		// Draw line from button to body when hovering and no body is selected
 		if hovered && selectedBodyID == 0 && !button.is_reset {
@@ -143,7 +137,16 @@ drawBodySelectorUI :: proc(bodies: [dynamic]Body) {
 				}
 				// Draw thin line in the body's color
 				raylib.DrawLineV(buttonCenter, bodyScreenPos, body.color)
+				outlineColor = body.color
 			}
 		}
+
+		raylib.DrawRectangleRec(button.rect, fillColor)
+		raylib.DrawRectangleLinesEx(button.rect, 1, outlineColor)
+
+		textWidth := raylib.MeasureText(button.label, selectorFontSize)
+		textX := i32(button.rect.x + (button.rect.width - f32(textWidth)) * 0.5)
+		textY := i32(button.rect.y + (button.rect.height - f32(selectorFontSize)) * 0.5)
+		raylib.DrawText(button.label, textX, textY, selectorFontSize, textColor)
 	}
 }
